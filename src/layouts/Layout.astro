@@ -4,6 +4,8 @@ interface Props {
   description?: string;
 }
 const { title = 'Matthias Zoettl | Portfolio', description = 'Photographer & Filmmaker based in Vienna.' } = Astro.props;
+// Absolute URL for social-share previews (requires `site` in astro.config.mjs).
+const ogImage = new URL('/images/postcards/postcard-01.jpg', Astro.site).href;
 ---
 <!doctype html>
 <html lang="en">
@@ -20,11 +22,12 @@ const { title = 'Matthias Zoettl | Portfolio', description = 'Photographer & Fil
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:image" content="/images/postcards/postcard-01.jpg" />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:url" content={Astro.site} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content="/images/postcards/postcard-01.jpg" />
+    <meta name="twitter:image" content={ogImage} />
 
     <!-- Apply saved theme + mark intro state before paint to avoid flash -->
     <script is:inline>
