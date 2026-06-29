@@ -1,0 +1,384 @@
+---
+import fs from 'node:fs';
+import path from 'node:path';
+
+function imgUrl(folder: string, file: string): string {
+  return `/images/${encodeURIComponent(folder)}/${encodeURIComponent(file)}`;
+}
+
+// Read JPEG dimensions from SOF marker — pure Node, no deps
+function getJpegDimensions(filePath: string): { w: number; h: number } {
+  try {
+    const buf = fs.readFileSync(filePath);
+    for (let i = 2; i < buf.length - 8; i++) {
+      if (buf[i] === 0xff && buf[i + 1] >= 0xc0 && buf[i + 1] <= 0xc3) {
+        return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+      }
+    }
+  } catch {}
+  return { w: 16, h: 9 };
+}
+
+
+
+// Parse _RxC suffix from filename, e.g. "venice_2x2.jpg" → { rows: 2, cols: 2 }
+function parseRxC(filename: string): { rows: number; cols: number } | null {
+  const m = filename.match(/_(\d+)x(\d+)\.[^.]+$/i);
+  if (m) return { rows: parseInt(m[1]), cols: parseInt(m[2]) };
+  return null;
+}
+
+// Per-file override: force these landscape images to span the full strip height
+// (their width is auto-computed from the actual image aspect ratio).
+const forceTall = new Set<string>([
+  "arch-04.jpg", "arch-06.jpg",
+  "transit-03.jpg", "transit-04.jpg", "transit-05.jpg", "transit-06.jpg",
+  "dolce-04.jpg", "dolce-13.jpg",
+  "space-04.jpg", "space-07.jpg", "space-08.jpg", "space-11.jpg", "space-12.jpg",
+  "local-04.jpg",
+  "worker-03.jpg", "worker-04.jpg", "worker-06.jpg",
+]);
+
+// Manual width override (px) — bypasses the auto aspect-ratio calculation.
+// Use this to force a non-natural ratio (e.g. square at 624 = 1:1).
+const widthOverride: Record<string, number> = {
+  "transit-03.jpg": 624,
+  "worker-03.jpg": 624,
+  "quiet-02.jpg": 624,
+};
+
+// Per-folder override: every image in these folders is forced tall
+const forceTallFolders = new Set<string>([
+  "do-not-disturb",
+  "album-covers",
+  "postcards",
+  "suspiciously-wholesome",
+]);
+
+// Per-file exception: keep these landscape (overrides forceTallFolders).
+// Two short landscapes stack in the same column.
+const forceShort = new Set<string>([
+  "quiet-03.jpg", "quiet-05.jpg",
+]);
+
+// Folders whose image order should be shuffled (deterministic per build)
+const shuffleFolders = new Set<string>();
+
+// After shuffling, pin these filenames to the end of their folder, in order
+const pinLast: Record<string, string[]> = {};
+
+// Preferred display order (by slug) — unlisted collections fall to the end
+const collectionOrder = [
+  "linkedin",
+  "still-standing",
+  "going-somewhere",
+];
+
+// Folder slug → human-readable display name
+const displayName: Record<string, string> = {
+  "linkedin":             "probably not on LinkedIn",
+  "do-not-disturb":       "do not disturb",
+  "empty-spaces":         "empty spaces",
+  "going-somewhere":      "everyone's going somewhere",
+  "album-covers":         "images that look like album covers",
+  "dolce-vita-club":      "dolce vita club",
+  "still-standing":       "still standing",
+  "other-locals":         "other locals",
+  "suspiciously-wholesome":"suspiciously wholesome",
+  "postcards":            "postcards from long ago",
+};
+
+const subheadlines: Record<string, string> = {
+  "linkedin":             "People mid-task, completely unbothered. The kind of hustle they don't teach in business school.",
+  "do-not-disturb":       "Stolen glances at people deep in their own world. No eye contact requested or given.",
+  "empty-spaces":         "Places that forgot to wait for anyone. The quiet architecture of absence.",
+  "going-somewhere":      "Motion as a state of mind. Vehicles, transit, the blur of being in between.",
+  "album-covers":         "You know the ones. Moody, cinematic, probably mid-tempo indie.",
+  "dolce-vita-club":      "Sun-soaked, unhurried, slightly overexposed. Membership is implied.",
+  "still-standing":       "Architecture that outlasted everything around it. Built before the rush, still here after.",
+  "other-locals":         "Non-human residents who were here first and have no plans to leave.",
+  "suspiciously-wholesome":"Almost too good. Almost.",
+  "postcards":            "Places that still feel like they belong to a different era.",
+};
+
+// Folders to skip when building collections (UI assets, etc.)
+const skipFolders = new Set<string>(["ui"]);
+
+const base = path.join(process.cwd(), 'public/images');
+const categories = fs.readdirSync(base, { withFileTypes: true })
+  .filter(d => d.isDirectory() && !d.name.startsWith('.') && !skipFolders.has(d.name))
+  .map(d => {
+    let images = fs.readdirSync(path.join(base, d.name))
+      .filter(f => /\.(jpg|jpeg|png|gif|webp)$/i.test(f) && !f.startsWith('.') && !/_tmp\./i.test(f))
+      .map(f => {
+        const filePath = path.join(base, d.name, f);
+        const { w, h } = /\.(jpg|jpeg)$/i.test(f) ? getJpegDimensions(filePath) : { w: 16, h: 9 };
+        const isForcedTall = (forceTallFolders.has(d.name) || forceTall.has(f)) && !forceShort.has(f);
+        const isPortrait = h > w;
+        const tall = isPortrait || isForcedTall;
+        // For landscape images forced to full strip height, keep their aspect ratio.
+        // Manual widthOverride wins if present (lets us force e.g. a square crop).
+        const customWidth = widthOverride[f]
+          ?? ((tall && !isPortrait) ? Math.round((w / h) * 624) : undefined);
+        return {
+          src: imgUrl(d.name, f),
+          alt: f.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' '),
+          portrait: tall,
+          customWidth,
+        };
+      });
+    if (shuffleFolders.has(d.name)) {
+      // Deterministic shuffle (seeded) so the order is stable across builds
+      let seed = [...d.name].reduce((s, c) => s + c.charCodeAt(0), 0);
+      for (let i = images.length - 1; i > 0; i--) {
+        seed = (seed * 9301 + 49297) % 233280;
+        const j = Math.floor((seed / 233280) * (i + 1));
+        [images[i], images[j]] = [images[j], images[i]];
+      }
+    }
+    const pinned = pinLast[d.name];
+    if (pinned?.length) {
+      const pinnedImgs = pinned
+        .map(name => images.find(i => i.src.endsWith('/' + encodeURIComponent(name))))
+        .filter((x): x is NonNullable<typeof x> => !!x);
+      images = images.filter(i => !pinnedImgs.includes(i)).concat(pinnedImgs);
+    }
+    return {
+      slug: d.name,
+      name: displayName[d.name] ?? d.name,
+      sub: subheadlines[d.name] ?? '',
+      images,
+    };
+  })
+  .filter(c => c.images.length > 0)
+  .sort((a, b) => {
+    const ai = collectionOrder.indexOf(a.slug);
+    const bi = collectionOrder.indexOf(b.slug);
+    if (ai === -1 && bi === -1) return 0;
+    if (ai === -1) return 1;
+    if (bi === -1) return -1;
+    return ai - bi;
+  });
+
+// Curated grid — pulls from collection folders by [folder, file]
+const gridImages = [
+  { src: "/images/still-standing/arch-02.jpg",          alt: "Lisbon, Portugal",          caption: "Lisbon, Portugal" },
+  { src: "/images/still-standing/arch-03.jpg",          alt: "Madrid, Spain",             caption: "Madrid, Spain" },
+  { src: "/images/empty-spaces/space-01.jpg",           alt: "Empty space",               caption: "Empty Spaces" },
+  { src: "/images/empty-spaces/space-04.jpg",           alt: "Empty space",               caption: "Empty Spaces" },
+  { src: "/images/empty-spaces/space-07.jpg",           alt: "Misty palms",               caption: "Misty Palms" },
+  { src: "/images/going-somewhere/transit-01.gif",      alt: "Vienna U-Bahn",             caption: "Vienna U-Bahn" },
+  { src: "/images/dolce-vita-club/dolce-04.jpg",        alt: "Tennis court",              caption: "Tennis Court" },
+  { src: "/images/going-somewhere/transit-03.jpg",      alt: "Transit",                   caption: "Transit" },
+  { src: "/images/postcards/postcard-01.jpg",           alt: "Venice, Italy",             caption: "Venice, Italy" },
+  { src: "/images/postcards/postcard-02.jpg",           alt: "Prater ferris wheel",       caption: "Prater, Vienna" },
+  { src: "/images/album-covers/cover-02.jpg",           alt: "Lonely runner",             caption: "Sri Lanka" },
+  { src: "/images/still-standing/arch-06.jpg",          alt: "Architecture",              caption: "Still Standing" },
+  { src: "/images/do-not-disturb/quiet-02.jpg",         alt: "Quiet moment",              caption: "Do Not Disturb" },
+  { src: "/images/still-standing/arch-01.jpg",          alt: "Architecture",              caption: "Still Standing" },
+  { src: "/images/album-covers/cover-01.jpg",           alt: "Album cover vibe",          caption: "Album Cover Energy" },
+  { src: "/images/linkedin/worker-03.jpg",              alt: "At work",                   caption: "Probably Not on LinkedIn" },
+  { src: "/images/linkedin/worker-02.jpg",              alt: "At work",                   caption: "Probably Not on LinkedIn" },
+  { src: "/images/dolce-vita-club/dolce-05.jpg",        alt: "Dolce vita",                caption: "Dolce Vita Club" },
+  { src: "/images/do-not-disturb/quiet-06.jpg",         alt: "Quiet moment",              caption: "Do Not Disturb" },
+  { src: "/images/going-somewhere/transit-05.jpg",      alt: "Transit",                   caption: "Transit" },
+  { src: "/images/other-locals/local-01.jpg",           alt: "Local resident",            caption: "Other Locals" },
+  { src: "/images/still-standing/arch-05.jpg",          alt: "Architecture",              caption: "Still Standing" },
+  { src: "/images/linkedin/worker-04.jpg",              alt: "Vietnam street",            caption: "Vietnam" },
+  { src: "/images/suspiciously-wholesome/wholesome-01.jpg", alt: "Wholesome scene",       caption: "Suspiciously Wholesome" },
+  { src: "/images/going-somewhere/transit-02.jpg",      alt: "Train",                     caption: "Train" },
+  { src: "/images/album-covers/cover-04.jpg",           alt: "Album cover vibe",          caption: "Album Cover Energy" },
+  { src: "/images/other-locals/local-04.jpg",           alt: "Local resident",            caption: "Other Locals" },
+  { src: "/images/empty-spaces/space-03.jpg",           alt: "Empty space",               caption: "Empty Spaces" },
+  { src: "/images/dolce-vita-club/dolce-02.jpg",        alt: "Dolce vita",                caption: "Dolce Vita Club" },
+  { src: "/images/empty-spaces/space-02.jpg",           alt: "Empty space",               caption: "Empty Spaces" },
+  { src: "/images/dolce-vita-club/dolce-07.jpg",        alt: "Dolce vita",                caption: "Dolce Vita Club" },
+  { src: "/images/linkedin/worker-06.jpg",              alt: "At work",                   caption: "Probably Not on LinkedIn" },
+  { src: "/images/other-locals/local-03.jpg",           alt: "Local resident",            caption: "Other Locals" },
+  { src: "/images/do-not-disturb/quiet-08.jpg",         alt: "Quiet moment",              caption: "Do Not Disturb" },
+  { src: "/images/do-not-disturb/quiet-12.jpg",         alt: "Quiet figure",              caption: "Do Not Disturb" },
+  { src: "/images/empty-spaces/space-08.jpg",           alt: "Empty space",               caption: "Empty Spaces" },
+  { src: "/images/do-not-disturb/quiet-07.jpg",         alt: "Quiet moment",              caption: "Do Not Disturb" },
+  { src: "/images/going-somewhere/transit-04.jpg",      alt: "Transit",                   caption: "Transit" },
+  { src: "/images/still-standing/arch-04.jpg",          alt: "Architecture",              caption: "Still Standing" },
+  { src: "/images/album-covers/cover-03.jpg",           alt: "Album cover vibe",          caption: "Album Cover Energy" },
+  { src: "/images/dolce-vita-club/dolce-06.jpg",        alt: "Dolce vita",                caption: "Dolce Vita Club" },
+  { src: "/images/do-not-disturb/quiet-10.jpg",         alt: "Quiet moment",              caption: "Do Not Disturb" },
+  { src: "/images/going-somewhere/transit-09.jpg",      alt: "Transit",                   caption: "Transit" },
+  { src: "/images/empty-spaces/space-11.jpg",           alt: "Empty space",               caption: "Empty Spaces" },
+  { src: "/images/going-somewhere/transit-06.jpg",      alt: "Transit",                   caption: "Transit" },
+  { src: "/images/empty-spaces/space-09.jpg",           alt: "Empty space",               caption: "Empty Spaces" },
+  { src: "/images/empty-spaces/space-10.jpg",           alt: "Empty space",               caption: "Empty Spaces" },
+  { src: "/images/suspiciously-wholesome/wholesome-02.jpg", alt: "Wholesome scene",       caption: "Suspiciously Wholesome" },
+];
+---
+
+<section id="photography">
+  <div class="gallery-toggle">
+    <div class="gallery-toggle-track">
+      <div class="gallery-toggle-bg"></div>
+      <button class="gallery-btn active" id="btn-grid">Grid</button>
+      <button class="gallery-btn" id="btn-collections">Collections</button>
+    </div>
+  </div>
+
+  <!-- ── Grid view ── -->
+  <div id="view-grid" class="container-gallery">
+    {gridImages.map((img, i) => (
+      <figure class={`gallery-item gallery-item${i + 1}`}>
+        <a href={img.src} data-fancybox="gallery" data-caption={img.caption}>
+          <img src={img.src} class="gallery__img" alt={img.alt} loading="lazy" />
+        </a>
+      </figure>
+    ))}
+  </div>
+
+  <!-- ── Collections view ── -->
+  <div id="view-collections" class="collections-view" hidden>
+    {categories.map((cat, i) => (
+      <div class="collection-block">
+        <div class="collection-header">
+          <div class="collection-meta">
+            <h3 class="collection-title">{cat.name}</h3>
+          </div>
+        </div>
+        <div class="collection-strip-wrap">
+          <div class="collection-strip">
+            {cat.images.map(img => (
+              <a
+                href={img.src}
+                data-fancybox={`col-${i}`}
+                data-caption={img.alt}
+                class="collection-thumb"
+                data-span={img.portrait ? "2" : "1"}
+                style={img.customWidth ? `width:${img.customWidth}px` : undefined}
+              >
+                <img src={img.src} alt={img.alt} loading="lazy" />
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
+
+<script>
+  const btnGrid = document.getElementById('btn-grid');
+  const btnCollections = document.getElementById('btn-collections');
+  const viewGrid = document.getElementById('view-grid') as HTMLElement | null;
+  const viewCollections = document.getElementById('view-collections') as HTMLElement | null;
+
+  // Sliding active/hover pill (composite.nyc style)
+  const toggleTrack = document.querySelector<HTMLElement>('.gallery-toggle-track');
+  const toggleBg = document.querySelector<HTMLElement>('.gallery-toggle-bg');
+  const toggleBtns = Array.from(document.querySelectorAll<HTMLButtonElement>('.gallery-btn'));
+
+  function moveBg(target: HTMLElement) {
+    if (!toggleTrack || !toggleBg) return;
+    const t = target.getBoundingClientRect();
+    const c = toggleTrack.getBoundingClientRect();
+    toggleBg.style.width = `${t.width}px`;
+    toggleBg.style.transform = `translateX(${t.left - c.left}px)`;
+  }
+  function moveBgToActive() {
+    const active = toggleBtns.find(b => b.classList.contains('active'));
+    if (active) moveBg(active);
+  }
+  if (toggleTrack && toggleBg && toggleBtns.length) {
+    requestAnimationFrame(() => {
+      moveBgToActive();
+      // Defer enabling the transition so the initial position doesn't animate from 0
+      setTimeout(() => {
+        toggleBg.style.transition = 'width 0.3s ease, transform 0.3s ease';
+      }, 50);
+    });
+    toggleBtns.forEach(btn => {
+      btn.addEventListener('mouseenter', () => moveBg(btn));
+    });
+    toggleTrack.addEventListener('mouseleave', moveBgToActive);
+    window.addEventListener('resize', moveBgToActive);
+  }
+
+  function fadeSwitch(hideEl: HTMLElement, showEl: HTMLElement) {
+    hideEl.style.opacity = '0';
+    hideEl.style.transition = 'opacity 0.2s ease';
+    setTimeout(() => {
+      hideEl.setAttribute('hidden', '');
+      hideEl.style.opacity = '';
+      hideEl.style.transition = '';
+      showEl.removeAttribute('hidden');
+      showEl.style.opacity = '0';
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        showEl.style.transition = 'opacity 0.35s ease';
+        showEl.style.opacity = '1';
+        setTimeout(() => { showEl.style.transition = ''; showEl.style.opacity = ''; }, 350);
+      }));
+    }, 200);
+  }
+
+  btnGrid?.addEventListener('click', () => {
+    if (btnGrid.classList.contains('active')) return;
+    btnGrid.classList.add('active');
+    btnCollections?.classList.remove('active');
+    moveBgToActive();
+    if (viewCollections && viewGrid) fadeSwitch(viewCollections, viewGrid);
+  });
+
+  btnCollections?.addEventListener('click', () => {
+    if (btnCollections.classList.contains('active')) return;
+    btnCollections.classList.add('active');
+    btnGrid?.classList.remove('active');
+    moveBgToActive();
+    if (viewGrid && viewCollections) fadeSwitch(viewGrid, viewCollections);
+  });
+
+  // Drag-to-scroll + scroll direction hints on collection strips
+  document.querySelectorAll<HTMLElement>('.collection-strip').forEach(strip => {
+    const wrap = strip.closest<HTMLElement>('.collection-strip-wrap');
+    let isDown = false;
+    let startX = 0;
+    let scrollLeft = 0;
+
+    function updateScrollHints() {
+      if (!wrap) return;
+      wrap.classList.toggle('can-scroll-left',  strip.scrollLeft > 2);
+      wrap.classList.toggle('can-scroll-right', strip.scrollLeft < strip.scrollWidth - strip.clientWidth - 2);
+    }
+
+    // Set initial state after layout
+    requestAnimationFrame(updateScrollHints);
+    strip.addEventListener('scroll', updateScrollHints);
+
+    strip.addEventListener('mousedown', (e) => {
+      isDown = true;
+      strip.dataset.dragging = '';
+      startX = e.pageX - strip.offsetLeft;
+      scrollLeft = strip.scrollLeft;
+    });
+    strip.addEventListener('mouseleave', () => { isDown = false; delete strip.dataset.dragging; });
+    strip.addEventListener('mouseup', () => { isDown = false; delete strip.dataset.dragging; });
+    strip.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - strip.offsetLeft;
+      strip.scrollLeft = scrollLeft - (x - startX) * 1.5;
+    });
+
+    // Prevent fancybox from opening on drag
+    strip.querySelectorAll('a').forEach(a => {
+      a.addEventListener('click', (e) => {
+        if ('dragging' in strip.dataset) e.preventDefault();
+      });
+    });
+  });
+
+  // "explore →" opens first image in that collection
+  document.querySelectorAll<HTMLElement>('.collection-view-all').forEach(el => {
+    el.addEventListener('click', () => {
+      const colIndex = el.dataset.col;
+      const firstThumb = document.querySelector<HTMLAnchorElement>(`[data-fancybox="col-${colIndex}"]`);
+      firstThumb?.click();
+    });
+  });
+</script>

@@ -1,0 +1,1208 @@
+---
+interface Props {
+  title?: string;
+  description?: string;
+}
+const { title = 'Matthias Zoettl | Portfolio', description = 'Photographer & Filmmaker based in Vienna.' } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/images/ui/favicons/favicon-32x32.png" />
+    <meta name="theme-color" content="#141414" />
+
+    <!-- Open Graph / Twitter — social share previews.
+         TIP: for absolute image URLs, set `site` in astro.config.mjs. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content="/images/postcards/postcard-01.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content="/images/postcards/postcard-01.jpg" />
+
+    <!-- Apply saved theme + mark intro state before paint to avoid flash -->
+    <script is:inline>
+      (function () {
+        try {
+          if (localStorage.getItem('theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+        // Play the full intro only once per browser session. On later loads
+        // (e.g. a reload while scrolled down) skip it pre-paint so there's no
+        // flash of the loader and the scroll position is preserved.
+        var introSeen = false;
+        try { introSeen = !!sessionStorage.getItem('introPlayed'); } catch (e) {}
+        // Like the reference (oakâme): the intro is a desktop-only flourish —
+        // skip it on narrow screens / mobile (< 1200px) and just show the page.
+        var smallScreen = window.innerWidth < 1200;
+        document.documentElement.classList.add((introSeen || smallScreen) ? 'intro-done' : 'is-intro');
+      })();
+    </script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=Manrope:wght@200;300;400;500;600;700;800&family=Montserrat:wght@300;400;500;800&display=swap" rel="stylesheet" />
+
+    <!-- Fancybox CSS — non-render-blocking (only needed once a lightbox opens) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.css" media="print" onload="this.media='all'" />
+
+    <!-- GSAP — deferred so it doesn't block first paint; the init below waits
+         for DOMContentLoaded, by which point deferred scripts have run. -->
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" is:inline></script>
+  </head>
+  <body>
+
+    <!-- Loader -->
+    <div id="loader">
+      <div class="loader-bg"></div>
+      <div class="loader-title">
+        <span class="loader-title-left">matthias</span>
+        <span class="loader-title-right">zoettl</span>
+      </div>
+      <div class="loader-counter">
+        <span id="loader-count">0</span><span class="loader-counter-sym">%</span>
+      </div>
+    </div>
+
+    <!-- Page -->
+    <div id="page" style="opacity:0">
+      <slot />
+    </div>
+
+    <!-- Fancybox JS — deferred (only needed for the lightbox) -->
+    <script defer src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0/dist/fancybox/fancybox.umd.js" is:inline></script>
+
+    <script is:inline>
+      // Run after DOMContentLoaded so the deferred GSAP/Fancybox have loaded.
+      document.addEventListener('DOMContentLoaded', function () {
+        const loader      = document.getElementById('loader');
+        const page        = document.getElementById('page');
+        const countEl     = document.getElementById('loader-count');
+        const titleLeft   = document.querySelector('.loader-title-left');
+        const titleRight  = document.querySelector('.loader-title-right');
+        const counterWrap = document.querySelector('.loader-counter');
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        // No GSAP at all — show the page and stop (nothing animated can run).
+        if (typeof gsap === 'undefined') {
+          loader.style.display = 'none';
+          document.documentElement.classList.remove('is-intro');
+          page.style.opacity = '1';
+          return;
+        }
+
+        // Reduced-motion users: pause the autoplaying hero video. (The intro and
+        // the looping logo/tagline animations are skipped further below.)
+        if (reduceMotion) {
+          const hv = document.querySelector('.hero-video');
+          if (hv) { try { hv.removeAttribute('autoplay'); hv.pause(); } catch (e) {} }
+        }
+
+        // Play the one-time intro only on the first load of the session.
+        // EITHER WAY, the page-wide animations further down (logo flip, tagline
+        // cycling, gallery fade-in, scroll reveals, dark toggle) still run —
+        // ONLY this intro block is gated. Skip on small screens too (desktop-
+        // only intro, like the reference) so the loader never shows on mobile.
+        if (document.documentElement.classList.contains('intro-done') || reduceMotion || window.innerWidth < 1200) {
+          // Already played / reduced-motion / mobile: show the page, keep scroll.
+          loader.style.display = 'none';
+          document.documentElement.classList.remove('is-intro');
+          page.style.opacity = '1';
+          if ('scrollRestoration' in history) history.scrollRestoration = 'auto';
+        } else {
+          // Intro plays — remember it for the session and start at the top.
+          try { sessionStorage.setItem('introPlayed', '1'); } catch (e) {}
+          if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+          window.scrollTo(0, 0);
+
+          // Hero text hidden until the hero has grown to full size
+          gsap.set(['.hero-left', '.hero-right'], { y: 40, opacity: 0 });
+        // Name halves fade up at center, then split out to the borders
+        gsap.set([titleLeft, titleRight], { opacity: 0, yPercent: 40 });
+        gsap.set(counterWrap, { opacity: 0 });
+        // Page is painted behind the loader's solid bg layer the whole time,
+        // so the small hero is ready to be uncovered.
+        gsap.set(page, { opacity: 1 });
+
+        const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+        const EASE = 'power2.inOut'; // one smooth glide shared across the intro
+        const SMALL = 0.32;          // scale of the small-window stage
+
+        // Hero geometry — layout size is unaffected by the scale transform.
+        const heropage = document.querySelector('.heropage');
+        const heroW = heropage.offsetWidth;
+        const heroH = heropage.offsetHeight;
+        const cX = window.innerWidth / 2;
+        const cY = heropage.offsetTop + heroH / 2; // the video's centre line
+        const HERO_RADIUS = 0.4 * rem;             // matches the resting 0.4em corners
+
+        const grow = { s: 0 };
+        // Each frame: scale the hero (keeping rounding constant) AND punch a
+        // hole in the loader matching the video's footprint. The white + words
+        // outside the hole are clipped away, so as the video grows it eats the
+        // text — the words disappear BEHIND the video instead of fading.
+        // (This stays entirely inside the loader, so #page / the nav are never
+        // touched.)
+        const applyGrow = () => {
+          const s = grow.s;
+          const r = s > 0.0001 ? Math.min(HERO_RADIUS / s, 260) : 260;
+          gsap.set('.heropage', { scale: s, borderRadius: r + 'px' });
+          if (s < 0.001) { loader.style.clipPath = 'none'; return; }
+          const hw = (heroW * s) / 2, hh = (heroH * s) / 2;
+          const L = cX - hw, R = cX + hw, T = cY - hh, B = cY + hh;
+          loader.style.clipPath =
+            'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%, ' +
+            L + 'px ' + T + 'px, ' + L + 'px ' + B + 'px, ' +
+            R + 'px ' + B + 'px, ' + R + 'px ' + T + 'px, ' + L + 'px ' + T + 'px)';
+        };
+        applyGrow(); // pin hero at scale 0 before it's uncovered
+        document.documentElement.classList.remove('is-intro');
+
+        // Centre the words on the video's centre line.
+        gsap.set('.loader-title', { top: cY });
+
+        // The words only move far enough to clear the small video (+ a gap),
+        // NOT all the way to the viewport edges.
+        const halfVid   = (heroW * SMALL) / 2;
+        const sideGap   = rem * 1.5;
+        const leftEdge  = cX - halfVid - sideGap; // matthias' right edge lands here
+        const rightEdge = cX + halfVid + sideGap; // zoettl's left edge lands here
+
+        const counter = { val: 0 };
+        const tl = gsap.timeline();
+
+        // Name fades up at center
+        tl.to([titleLeft, titleRight], {
+          opacity: 1, yPercent: 0, duration: 0.65, ease: 'power3.out', stagger: 0.05,
+        }, 0);
+
+        // Counter fades in + counts — decorative, does NOT gate the reveal
+        tl.to(counterWrap, { opacity: 1, duration: 0.3, ease: 'power2.out' }, 0.15)
+          .to(counter, {
+            val: 100, duration: 1.2, ease: 'power1.inOut',
+            onUpdate: () => { countEl.textContent = Math.round(counter.val); },
+          }, 0.2);
+
+        // Split the words apart just enough to open a gap for the small video.
+        tl.to(titleLeft, {
+          x: () => leftEdge - titleLeft.getBoundingClientRect().right,
+          duration: 0.9, ease: EASE,
+        }, 0.45)
+          .to(titleRight, {
+            x: () => rightEdge - titleRight.getBoundingClientRect().left,
+            duration: 0.9, ease: EASE,
+          }, '<');
+
+        // Phase 1: hero grows 0 -> small. The clip-hole opens with it, so the
+        // small video appears in the gap between the words.
+        tl.to(grow, { s: SMALL, duration: 0.7, ease: 'power2.out', onUpdate: applyGrow }, 0.85);
+
+        // Phase 2: hero grows small -> full. The hole grows too, so the video
+        // slides OVER the words — they disappear behind it (no fade).
+        tl.to(grow, { s: 1, duration: 1.15, ease: EASE, onUpdate: applyGrow }, 1.9);
+
+        // Fade the thin leftover margin of the loader, then drop it.
+        tl.to(loader, { opacity: 0, duration: 0.3, ease: 'power1.out' }, '>-0.1')
+          .set(loader, { display: 'none' });
+
+        // Rise the hero text in after the hero has settled at full size.
+        tl.to('.hero-left', {
+          y: 0, opacity: 1, duration: 0.8, ease: 'power3.out',
+        }, '>-0.05');
+        } // end one-time intro — everything below runs on every load
+
+        // Fancybox — bind all groups
+        if (typeof Fancybox !== 'undefined') {
+          Fancybox.bind('[data-fancybox]', {
+            Toolbar: {
+              display: { left: [], middle: [], right: ['close'] },
+            },
+            showClass: 'f-fadeIn',
+            hideClass: 'f-fadeOut',
+            dragToClose: false,
+            Images: { zoom: false, Panzoom: { panMode: 'mousemove' } },
+            Carousel: {
+              transition: 'fade',
+              infinite: true,
+            },
+          });
+        }
+
+        // Fade-in gallery images on scroll
+        const imgs = document.querySelectorAll('.gallery__img');
+        const io = new IntersectionObserver((entries) => {
+          entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('fadeIn'); io.unobserve(e.target); } });
+        }, { threshold: 0.1 });
+        imgs.forEach((img) => io.observe(img));
+
+        // Dark mode toggle
+        const btn = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+
+        function updateToggle(isDark) {
+          const label = document.getElementById('toggle-label');
+          if (label) label.textContent = isDark ? 'Light' : 'Dark';
+        }
+
+        updateToggle(html.classList.contains('dark'));
+
+        btn?.addEventListener('click', () => {
+          const isDark = html.classList.toggle('dark');
+          try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (e) {}
+          updateToggle(isDark);
+        });
+
+        // Tagline cycling image — appears on scroll, then starts cycling.
+        // Pulls a random subset straight from the grid (stays in sync), and
+        // PRELOADS them so the fast 180ms crossfade never lands on an
+        // un-downloaded image (which would flash white).
+        const taglineImgs = Array.from(document.querySelectorAll('#view-grid .gallery__img'))
+          .map((el) => el.getAttribute('src'))
+          .filter(Boolean)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 12);
+        taglineImgs.forEach((src) => { const im = new Image(); im.src = src; });
+
+        const thumbWrap = document.querySelector('.tagline-thumb-wrap');
+        const tA = document.querySelector('.t-img-a');
+        const tB = document.querySelector('.t-img-b');
+
+        if (thumbWrap && tA && tB && taglineImgs.length) {
+          let idx = 0;
+          let useA = true;
+          tA.style.backgroundImage = `url('${taglineImgs[0]}')`;
+
+          function startCycling() {
+            setInterval(() => {
+              idx = (idx + 1) % taglineImgs.length;
+              if (useA) {
+                tB.style.backgroundImage = `url('${taglineImgs[idx]}')`;
+                tB.style.opacity = '1';
+                tA.style.opacity = '0';
+              } else {
+                tA.style.backgroundImage = `url('${taglineImgs[idx]}')`;
+                tA.style.opacity = '1';
+                tB.style.opacity = '0';
+              }
+              useA = !useA;
+            }, 180);
+          }
+
+          const thumbObs = new IntersectionObserver((entries) => {
+            entries.forEach(e => {
+              if (e.isIntersecting) {
+                // Small delay so user sees the text first
+                setTimeout(() => {
+                  thumbWrap.classList.add('visible');
+                  if (!reduceMotion) setTimeout(startCycling, 900);
+                }, 300);
+                thumbObs.unobserve(thumbWrap);
+              }
+            });
+          }, { threshold: 0.8 });
+
+          thumbObs.observe(thumbWrap);
+        }
+
+        // Trusted-by rotating logos (cube flip) — 5 persistent faces, no DOM mutation per tick
+        const faces = Array.from(document.querySelectorAll('.logo-flip-face'));
+        if (faces.length > 1) {
+          let activeIdx = 0;
+          gsap.set(faces, { rotationX: 90, transformOrigin: '50% 50% -11px', force3D: true });
+          gsap.set(faces[0], { rotationX: 0 });
+
+          function flipNext() {
+            const fromIdx = activeIdx;
+            const toIdx = (activeIdx + 1) % faces.length;
+            // Park every other face out of view so a delayed/queued tween can't leak
+            faces.forEach((f, i) => {
+              if (i !== fromIdx && i !== toIdx) gsap.set(f, { rotationX: 90 });
+            });
+            gsap.set(faces[toIdx], { rotationX: 90 });
+            const tl = gsap.timeline({
+              defaults: { duration: 0.7, ease: 'sine.inOut', force3D: true },
+            });
+            tl.to(faces[fromIdx], { rotationX: -90 }, 0);
+            tl.to(faces[toIdx],   { rotationX: 0   }, 0);
+            activeIdx = toIdx;
+          }
+          if (!reduceMotion) setInterval(flipNext, 2400);
+        }
+
+        // Scroll reveal animations
+        const reveals = document.querySelectorAll('.reveal');
+        const revealObs = new IntersectionObserver((entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) { e.target.classList.add('visible'); revealObs.unobserve(e.target); }
+          });
+        }, { threshold: 0.15 });
+        reveals.forEach((el) => revealObs.observe(el));
+      });
+    </script>
+
+    <style is:global>
+      /* ─── Reduced motion: neutralise transitions/animations + reveal content ─── */
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.001ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.001ms !important;
+          scroll-behavior: auto !important;
+        }
+        .reveal { opacity: 1 !important; transform: none !important; }
+        .gallery__img { opacity: 1 !important; }
+        #page { opacity: 1 !important; }
+      }
+
+      /* ─── Theme variables ─── */
+      :root {
+        --bg:             #ffffff;
+        --sidebar-bg:     #ffffff;
+        --text:           rgb(22,22,22);
+        --text-muted:     rgba(22,22,22,0.5);
+        --text-faint:     rgba(22,22,22,0.3);
+        --nav-hover-bg:   rgba(22,22,22,0.05);
+        --nav-active-bg:  rgba(22,22,22,0.07);
+        --nav-color:      rgba(22,22,22,0.45);
+        --nav-hover:      rgba(22,22,22,0.9);
+        --nav-active:     rgba(22,22,22,1);
+        --logo-h1:        rgba(26,26,26,1);
+        --logo-p:         rgba(26,26,26,0.5);
+        --shadow:         rgba(22,22,22,0.08);
+        --border:         rgba(22,22,22,0.1);
+        --scrollbar:      #ddd;
+        --section-bg:     #ffffff;
+        --sub-vid-color:  rgba(22,22,22,0.9);
+        --contact-card-bg:#ffffff;
+        --contact-card-hover: rgba(22,22,22,0.02);
+        --fancybox-bg:    rgba(255,255,255,0.97);
+        --lb-bg:          #f4f3ef;
+        --lb-color:       rgba(22,22,22,0.55);
+        --lb-color-strong:rgba(22,22,22,0.95);
+        --lb-color-faint: rgba(22,22,22,0.35);
+        --lb-border:      rgba(22,22,22,0.18);
+        --loader-bg:      #ffffff;
+        --loader-color:   rgba(17,17,17,0.7);
+      }
+
+      html.dark {
+        --bg:             #141414;
+        --sidebar-bg:     #111111;
+        --text:           rgb(225,222,216);
+        --text-muted:     rgba(225,222,216,0.5);
+        --text-faint:     rgba(225,222,216,0.25);
+        --nav-hover-bg:   rgba(255,255,255,0.06);
+        --nav-active-bg:  rgba(255,255,255,0.1);
+        --nav-color:      rgba(225,222,216,0.4);
+        --nav-hover:      rgba(225,222,216,0.9);
+        --nav-active:     rgba(225,222,216,1);
+        --logo-h1:        rgba(225,222,216,1);
+        --logo-p:         rgba(225,222,216,0.45);
+        --shadow:         rgba(0,0,0,0.4);
+        --border:         rgba(225,222,216,0.1);
+        --scrollbar:      #333;
+        --section-bg:     #141414;
+        --sub-vid-color:  rgba(225,222,216,0.9);
+        --contact-card-bg:#1a1a1a;
+        --contact-card-hover: rgba(255,255,255,0.03);
+        --fancybox-bg:    rgba(20,20,20,0.97);
+        --lb-bg:          #0f0f0f;
+        --lb-color:       rgba(230,228,222,0.55);
+        --lb-color-strong:rgba(230,228,222,0.95);
+        --lb-color-faint: rgba(230,228,222,0.35);
+        --lb-border:      rgba(230,228,222,0.18);
+        --loader-bg:      #141414;
+        --loader-color:   rgba(225,222,216,0.7);
+      }
+
+      /* ─── Base ─── */
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      [hidden] { display: none !important; }
+      html { scroll-behavior: smooth; scroll-snap-type: y proximity; }
+
+      body {
+        background: var(--bg);
+        font-family: 'Montserrat', sans-serif;
+        font-size: 19pt;
+        font-weight: 300;
+        line-height: 1.5em;
+        color: var(--text);
+        transition: background 0.3s ease, color 0.3s ease;
+      }
+
+      h2 {
+        font-family: 'Cormorant Garamond', serif;
+        font-weight: 300;
+        font-size: 1.5em;
+        letter-spacing: -1px;
+        line-height: 1.5em;
+        color: var(--text);
+      }
+
+      a { text-decoration: none; color: inherit; }
+
+      /* ─── Loader ─── */
+      #loader {
+        position: fixed; inset: 0; z-index: 999;
+        color: var(--loader-color);
+        overflow: hidden;
+      }
+      /* Solid background layer — fades away to uncover the small hero. */
+      .loader-bg {
+        position: absolute; inset: 0;
+        background: var(--loader-bg);
+        z-index: 0;
+        transition: background 0.3s ease;
+      }
+      /* Intro already played this session — no loader, page shown immediately. */
+      html.intro-done #loader { display: none; }
+      html.intro-done #page { opacity: 1 !important; }
+      /* Split name, centered. The two halves slide apart to reveal the hero. */
+      .loader-title {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1;
+        display: flex;
+        align-items: baseline;
+        gap: 0.28em;
+        white-space: nowrap;
+        font-family: 'Manrope', sans-serif;
+        font-weight: 700;
+        font-size: clamp(28px, 5.2vw, 66px);
+        letter-spacing: -0.04em;
+        text-transform: lowercase;
+        line-height: 1;
+        color: var(--text, #111);
+      }
+      /* Hidden until GSAP fades them in (GSAP is deferred, so this avoids a
+         flash of the static words before the intro starts). */
+      .loader-title-left,
+      .loader-title-right { display: inline-block; will-change: transform; opacity: 0; }
+      .loader-counter {
+        position: absolute;
+        z-index: 1;
+        bottom: 7%; left: 0; right: 0;
+        text-align: center;
+        font-family: 'Manrope', sans-serif;
+        font-weight: 600;
+        font-size: clamp(13px, 1.3vw, 18px);
+        letter-spacing: 0.14em;
+        color: var(--loader-color);
+        font-variant-numeric: tabular-nums;
+        opacity: 0; /* GSAP fades it in (deferred-load flash guard) */
+      }
+      .loader-counter-sym { margin-left: 0.15em; opacity: 0.6; }
+
+      /* ─── Top Nav ─── */
+      #topnav {
+        position: fixed; top: 0; left: 0; right: 0;
+        z-index: 100;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 1em 2em;
+        mix-blend-mode: difference;
+      }
+      .topnav-name {
+        font-family: 'Manrope', sans-serif;
+        font-size: 0.38em; font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: lowercase;
+        color: #ffffff;
+      }
+      .topnav-actions {
+        display: flex; align-items: center; gap: 1.2em;
+      }
+      .topnav-contact {
+        font-family: 'Manrope', sans-serif;
+        font-size: 0.3em; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.2em;
+        line-height: 1;
+        color: #ffffff;
+        border: 1px solid rgba(255,255,255,0.6);
+        padding: 0.85em 1.6em;
+        border-radius: 999px;
+      }
+
+      /* ─── Theme toggle ─── */
+      #theme-toggle {
+        display: flex; align-items: center; gap: 0.5em;
+        background: none; border: none; cursor: pointer;
+        font-family: 'Manrope', sans-serif;
+        font-size: 0.3em; font-weight: 500;
+        text-transform: uppercase; letter-spacing: 0.15em;
+        color: #ffffff;
+        padding: 0;
+      }
+      .toggle-track {
+        position: relative;
+        width: 28px; height: 16px; flex-shrink: 0;
+        background: rgba(255,255,255,0.3);
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.6);
+      }
+      .toggle-thumb {
+        position: absolute;
+        top: 2px; left: 2px;
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        background: #ffffff;
+        transition: transform 0.25s ease;
+      }
+      html.dark .toggle-thumb { transform: translateX(12px); }
+
+      /* ─── Hero ─── */
+      .heropage {
+        margin: 85px 8px 8px;
+        height: calc(100vh - 93px);
+        position: relative; border-radius: 0.4em;
+        overflow: hidden;
+        transform-origin: center center;
+        will-change: transform;
+        /* Make the hero box a query container so the stage can size itself to
+           cover it based on the box's actual aspect ratio. */
+        container-type: size;
+      }
+      /* During the intro the hero starts hidden at scale 0; GSAP grows it
+         0 -> small -> full. (Prevents a full-size flash before JS runs.) */
+      html.is-intro .heropage {
+        transform: scale(0);
+      }
+
+      /* ─── Trusted-by bar — sits on the nav row at the top of the page,
+            but scrolls away with the page (not fixed like the nav) ─── */
+      .trusted-by {
+        position: absolute;
+        top: 0; left: 50%;
+        transform: translateX(-50%);
+        z-index: 99;
+        display: flex;
+        align-items: center;
+        gap: 1em;
+        padding: 1em 0;
+        pointer-events: none;
+        color: rgba(22, 22, 22, 0.85);
+      }
+      html.dark .trusted-by { color: rgba(225, 222, 216, 0.85); }
+      .trusted-by-label {
+        font-family: 'Manrope', sans-serif;
+        font-size: 0.38em;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: lowercase;
+        white-space: nowrap;
+      }
+      .logo-flip {
+        position: relative;
+        height: 22px;
+        width: 130px;
+        perspective: 1200px;
+        will-change: transform;
+        contain: layout style paint;
+      }
+      .logo-flip-face {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        backface-visibility: hidden;
+        transform-style: preserve-3d;
+        will-change: transform;
+      }
+      .logo-flip-face img {
+        width: auto;
+        height: auto;
+        opacity: 0.9;
+        /* SVGs are already pure black — no filter needed in light mode */
+      }
+      html.dark .logo-flip-face img {
+        filter: invert(1);
+      }
+      /* Per-logo tuning so wordmarks + icons look the same visual weight */
+      .logo-flip-face img[data-name="color-coordinated"] { height: 9px;  max-width: 130px; }
+      .logo-flip-face img[data-name="dolce-vita-club"]   { height: 22px; max-width: 95px;  }
+      .logo-flip-face img[data-name="debode-creations"]  { height: 18px; max-width: 95px;  }
+      .logo-flip-face img[data-name="crownd-estates"]    { height: 20px; max-width: 28px;  }
+      .logo-flip-face img[data-name="physio-reha-move"]  { height: 13px; max-width: 110px; }
+      /* ── Hero "stage" ──────────────────────────────────────────────────
+         The video, the person cutout, AND the headline all live in ONE box
+         that is sized to COVER the hero and zoomed (top-anchored, so the
+         subject sits low). Because they share this coordinate space, the text
+         stays on the exact same spot of the video at every viewport size. */
+      .hero-stage {
+        position: absolute;
+        top: 0; left: 50%;
+        transform: translateX(-50%);
+        aspect-ratio: 16 / 9;     /* the video's native ratio */
+        width: 105%;              /* cover-by-width × zoom; anchored to the top */
+      }
+      @container (max-aspect-ratio: 16 / 9) {
+        /* Box is taller/narrower than the video — cover by height instead. */
+        .hero-stage { width: auto; height: 105%; }
+      }
+
+      .hero-video,
+      .hero-person {
+        position: absolute; inset: 0;
+        width: 100%; height: 100%;
+        object-fit: cover;
+        object-position: center;
+      }
+      .hero-video  { z-index: 0; }
+      .hero-person { z-index: 3; pointer-events: none; }
+
+      /* Darkening gradient + grain — locked to the stage, above video / below text */
+      .hero-stage::after {
+        content: "";
+        position: absolute; inset: 0; z-index: 1; pointer-events: none;
+        background: linear-gradient(to bottom, rgba(40,40,40,0.18), rgba(40,40,40,0.32));
+      }
+      .hero-stage::before {
+        content: "";
+        position: absolute; inset: 0; z-index: 1; pointer-events: none;
+        background-image: url('/images/ui/noise-texture.png');
+        opacity: 0.25;
+      }
+
+      .placeholder { width: 100%; height: 2px; }
+
+      /* Headline — positioned in the STAGE's coordinate space (so it tracks the
+         video), but sized in vw so its size is independent of the zoom.
+         `top` is the single knob to move it up/down over the video. */
+      .hero-head-container {
+        position: absolute;
+        top: 26%; left: 0; right: 0;
+        z-index: 2;
+        color: white;
+        text-align: center;
+      }
+      .hero-title {
+        margin: 0;
+        font-family: 'Manrope', sans-serif;
+        font-weight: 700;
+        font-size: clamp(48px, 5.5vw, 74px);
+        line-height: 1.15;
+        letter-spacing: -0.035em;
+        color: rgb(245,245,243);
+        text-transform: lowercase;
+      }
+      /* Small-cap initial for the tagline ("streets") */
+      .tagline-sc { font-variant-caps: small-caps; }
+      .hero-left  { display: block; text-align: center; }
+      .hero-right { text-align: right; }
+      /* Stacked hero headline: through / my lens */
+      .hero-line { display: block; }
+      /* "my" and "lens" flank the person with a gap CENTRED on the person.
+         Equal halves + inner alignment make the gap symmetric regardless of the
+         two words' different widths. `gap` is the knob (a % of the stage). */
+      .hero-line--gap {
+        display: flex;
+        width: 100%;
+        gap: 8%;
+        /* nudge the pair to re-centre the gap on the (slightly off-centre)
+           person — negative = left, positive = right */
+        transform: translateX(-0.5%);
+      }
+      .hero-line--gap > span { flex: 1 1 0; }
+      .hero-line--gap > span:first-child { text-align: right; }
+      .hero-line--gap > span:last-child  { text-align: left; }
+      .hero-name-top {
+        position: absolute;
+        top: 1.4em;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 3;
+        white-space: nowrap;
+        display: flex;
+        align-items: baseline;
+        gap: 0.4em;
+      }
+      .hero-name-matthias {
+        font-family: 'Cormorant Garamond', serif;
+        font-weight: 300;
+        font-style: italic;
+        font-size: 0.55em;
+        letter-spacing: 0.1em;
+        color: rgba(236,236,236,0.75);
+      }
+      .hero-name-zoettl {
+        font-family: 'Montserrat', sans-serif;
+        font-weight: 800;
+        font-size: 0.38em;
+        text-transform: lowercase;
+        letter-spacing: 0.12em;
+        color: rgba(236,236,236,0.75);
+      }
+      .sub-header {
+        font-family: 'Montserrat', sans-serif; margin-top: -0.1em;
+        font-style: italic; font-weight: 100; font-size: 0.5em;
+        letter-spacing: 0.2em; color: rgba(236,236,236,0.85);
+      }
+      .sub-quote {
+        font-family: 'Cormorant Garamond', serif; text-align: center;
+        color: rgb(218,218,218); font-size: 0.6em;
+        letter-spacing: 0.15em; font-weight: 100;
+        width: 60%; margin: 0 auto; line-height: 1.2;
+      }
+      .section-devider {
+        height: 40px; width: 1px; position: absolute;
+        background-color: rgb(218,218,218); bottom: 0; left: 50%;
+      }
+
+      /* ─── Reveal animations ─── */
+      .reveal {
+        opacity: 0;
+        transform: translateY(28px);
+        transition: opacity 1s ease, transform 1s ease;
+      }
+      .reveal.visible { opacity: 1; transform: translateY(0); }
+      .reveal + .reveal { transition-delay: 0.15s; }
+
+      /* ─── Tagline ─── */
+      .tagline-section {
+        min-height: 100vh;
+        padding: 0 8%;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        scroll-snap-align: start;
+      }
+      .tagline-text {
+        font-family: 'Manrope', sans-serif;
+        font-weight: 700;
+        font-size: clamp(48px, 5.5vw, 74px);
+        letter-spacing: -0.035em;
+        line-height: 1.15;
+        color: var(--text);
+        max-width: 1100px;
+        margin: 0 auto;
+        text-align: center;
+      }
+
+      /* Inline cycling image circle */
+      .tagline-thumb-wrap {
+        display: inline-block;
+        width: 0;
+        height: 1.1em;
+        border-radius: 50%;
+        overflow: hidden;
+        vertical-align: middle;
+        position: relative;
+        margin: 0;
+        transform: translateY(-0.07em) scale(0);
+        opacity: 0;
+        /* gap opens first, then image pops in */
+        transition:
+          width 0.4s ease,
+          margin 0.4s ease,
+          transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.35s,
+          opacity 0.3s ease 0.35s;
+        flex-shrink: 0;
+      }
+      .tagline-thumb-wrap.visible {
+        width: 1.1em;
+        margin: 0 0.12em;
+        transform: translateY(-0.07em) scale(1);
+        opacity: 1;
+      }
+      .t-img {
+        position: absolute;
+        inset: 0;
+        background-size: cover;
+        background-position: center;
+        transition: none;
+      }
+      .t-img-a { opacity: 1; }
+      .t-img-b { opacity: 0; }
+
+      /* ─── Gallery ─── */
+      .container { width: 100%; text-align: center; padding: 0 10%; }
+      #photography { padding: 0; }
+
+      .container-gallery {
+        display: grid;
+        grid-template-columns: repeat(16, 1fr);
+        grid-template-rows: repeat(129, 6.5vw);
+        grid-gap: 3px;
+        padding: 0 8px;
+      }
+      .gallery-item { overflow: hidden; border-radius: 6px; position: relative; }
+      .gallery-picture { height: 100%; width: 100%; object-fit: cover; }
+      .gallery__img {
+        height: 100%; width: 100%; object-fit: cover;
+        opacity: 0;
+        filter: grayscale(35%) saturate(0.95);
+        transition: transform 0.4s ease, filter 0.4s ease, opacity 2s ease;
+      }
+      .gallery__img.fadeIn { opacity: 1; }
+
+      @media (hover: hover) and (min-width: 1024px) {
+        .gallery__img:hover {
+          filter: grayscale(0%) saturate(1);
+          transform: scale(1.05);
+        }
+      }
+
+      .gallery-item1  { grid-column: 1 / 6;   grid-row: 1 / 4; }
+      .gallery-item2  { grid-column: 6 / 11;  grid-row: 1 / 4; }
+      .gallery-item3  { grid-column: 11 / 18; grid-row: 1 / 9; }
+      .gallery-item4  { grid-column: 1 / 11;  grid-row: 4 / 9; }
+      .gallery-item5  { grid-column: 1 / 5;   grid-row: 9 / 14; }
+      .gallery-item6  { grid-column: 5 / 18;  grid-row: 9 / 14; }
+      .gallery-item7  { grid-column: 1 / 9;   grid-row: 14 / 19; }
+      .gallery-item8  { grid-column: 9 / 18;  grid-row: 14 / 19; }
+      .gallery-item9  { grid-column: 1 / 18;  grid-row: 19 / 26; }
+      .gallery-item10 { grid-column: 1 / 11;  grid-row: 26 / 32; }
+      .gallery-item11 { grid-column: 11 / 18; grid-row: 26 / 32; }
+      .gallery-item12 { grid-column: 1 / 9;   grid-row: 32 / 37; }
+      .gallery-item13 { grid-column: 9 / 18;  grid-row: 32 / 37; }
+      .gallery-item14 { grid-column: 1 / 5;   grid-row: 37 / 43; }
+      .gallery-item15 { grid-column: 5 / 18;  grid-row: 37 / 43; }
+      .gallery-item16 { grid-column: 1 / 6;   grid-row: 43 / 47; }
+      .gallery-item17 { grid-column: 6 / 11;  grid-row: 43 / 47; }
+      .gallery-item18 { grid-column: 11 / 18; grid-row: 43 / 49; }
+      .gallery-item19 { grid-column: 1 / 11;  grid-row: 47 / 52; }
+      .gallery-item20 { grid-column: 1 / 5;   grid-row: 52 / 57; }
+      .gallery-item21 { grid-column: 5 / 11;  grid-row: 52 / 57; }
+      .gallery-item22 { grid-column: 11 / 18; grid-row: 49 / 57; }
+      .gallery-item23 { grid-column: 1 / 18;  grid-row: 57 / 64; }
+      .gallery-item24 { grid-column: 1 / 9;   grid-row: 64 / 69; }
+      .gallery-item25 { grid-column: 9 / 18;  grid-row: 64 / 69; }
+      .gallery-item26 { grid-column: 1 / 6;   grid-row: 69 / 76; }
+      .gallery-item27 { grid-column: 6 / 12;  grid-row: 69 / 72; }
+      .gallery-item28 { grid-column: 12 / 18; grid-row: 69 / 72; }
+      .gallery-item29 { grid-column: 6 / 12;  grid-row: 72 / 76; }
+      .gallery-item30 { grid-column: 12 / 18; grid-row: 72 / 76; }
+      .gallery-item31 { grid-column: 1 / 6;   grid-row: 76 / 79; }
+      .gallery-item32 { grid-column: 6 / 11;  grid-row: 76 / 79; }
+      .gallery-item33 { grid-column: 11 / 18; grid-row: 76 / 84; }
+      .gallery-item34 { grid-column: 1 / 11;  grid-row: 79 / 84; }
+      .gallery-item35 { grid-column: 1 / 5;   grid-row: 84 / 89; }
+      .gallery-item36 { grid-column: 5 / 18;  grid-row: 84 / 89; }
+      .gallery-item37 { grid-column: 1 / 9;   grid-row: 89 / 94; }
+      .gallery-item38 { grid-column: 9 / 18;  grid-row: 89 / 94; }
+      .gallery-item39 { grid-column: 1 / 18;  grid-row: 94 / 101; }
+      .gallery-item40 { grid-column: 1 / 11;  grid-row: 101 / 107; }
+      .gallery-item41 { grid-column: 11 / 18; grid-row: 101 / 107; }
+      .gallery-item42 { grid-column: 1 / 9;   grid-row: 107 / 112; }
+      .gallery-item43 { grid-column: 9 / 18;  grid-row: 107 / 112; }
+      .gallery-item44 { grid-column: 1 / 5;   grid-row: 112 / 118; }
+      .gallery-item45 { grid-column: 5 / 18;  grid-row: 112 / 118; }
+      .gallery-item46 { grid-column: 1 / 9;   grid-row: 118 / 123; }
+      .gallery-item47 { grid-column: 9 / 18;  grid-row: 118 / 123; }
+      .gallery-item48 { grid-column: 1 / 18;  grid-row: 123 / 130; }
+
+
+      /* ─── Gallery toggle (composite.nyc style) ─── */
+      .gallery-toggle {
+        margin: 0 0 3em;
+      }
+      .gallery-toggle-track {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        width: fit-content;
+        margin: 0 auto;
+        background: hsla(0, 0%, 71%, 0.4);
+        -webkit-backdrop-filter: blur(10px) brightness(1.1) saturate(1.5);
+        backdrop-filter: blur(10px) brightness(1.1) saturate(1.5);
+        border-radius: 1.25rem;
+        padding: 0.6rem 0.25rem;
+      }
+      .gallery-toggle-bg {
+        position: absolute;
+        top: 0.2rem;
+        left: 0;
+        height: calc(100% - 0.4rem);
+        width: 0;
+        background: hsla(0, 0%, 36%, 0.37);
+        -webkit-backdrop-filter: blur(17px) saturate(4.5);
+        backdrop-filter: blur(17px) saturate(4.5);
+        border-radius: 1.25rem;
+        z-index: -1;
+        pointer-events: none;
+        transform: translateX(0);
+      }
+      html.dark .gallery-toggle-track {
+        background: hsla(0, 0%, 30%, 0.35);
+      }
+      .gallery-btn {
+        font-family: 'Manrope', sans-serif;
+        font-size: 0.75rem;
+        font-weight: 400;
+        line-height: 100%;
+        letter-spacing: 0.045rem;
+        text-transform: none;
+        padding: 0.25rem 0.7rem;
+        background: none;
+        border: none;
+        border-radius: 1.25rem;
+        color: rgba(0, 0, 0, 0.75);
+        cursor: pointer;
+        transition: color 0.2s ease;
+        white-space: nowrap;
+      }
+      html.dark .gallery-btn { color: hsla(0, 0%, 100%, 0.75); }
+
+      .gallery-btn.active { color: #ffffff; }
+      html.dark .gallery-btn.active { color: #ffffff; }
+
+      /* When user hovers the track, the active item dims and the hovered one lights up */
+      .gallery-toggle-track:hover .gallery-btn.active { color: rgba(0, 0, 0, 0.75); }
+      html.dark .gallery-toggle-track:hover .gallery-btn.active { color: hsla(0, 0%, 100%, 0.75); }
+      .gallery-toggle-track:hover .gallery-btn:hover { color: #ffffff; }
+
+      /* ─── Collections view ─── */
+      .collections-view { padding: 0 0 10vh; }
+      .collection-block {
+        margin-bottom: 16vh;
+        padding-top: 5vh;
+      }
+      .collection-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 2em;
+        padding: 0 7%;
+        gap: 2em;
+        text-align: left;
+      }
+      .collection-meta { flex: 1; }
+      .collection-index {
+        font-family: 'Manrope', sans-serif;
+        font-weight: 500;
+        font-size: 0.26em;
+        color: var(--text-faint);
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        line-height: 1;
+        padding-bottom: 0.4em;
+        flex-shrink: 0;
+        cursor: pointer;
+        border-bottom: 1px solid transparent;
+        transition: color 0.2s ease, border-color 0.2s ease;
+      }
+      .collection-index:hover {
+        color: var(--text-muted);
+        border-bottom-color: var(--text-muted);
+      }
+      .collection-title,
+      .section-heading {
+        font-family: 'Manrope', sans-serif;
+        font-weight: 700;
+        font-size: clamp(48px, 5.5vw, 74px);
+        letter-spacing: -0.035em;
+        line-height: 1.05;
+        color: var(--text);
+        text-align: left;
+        text-transform: lowercase;
+        margin-bottom: 0;
+      }
+      .collection-sub {
+        font-family: 'Manrope', sans-serif;
+        font-size: 0.48em; font-weight: 300;
+        color: var(--text-muted); text-align: left;
+        max-width: 420px; line-height: 1.75;
+        margin-top: 0.65em;
+        letter-spacing: 0.01em;
+      }
+      /* Strip wrapper — gradient fades + directional scroll hints */
+      .collection-strip-wrap { position: relative; }
+
+      /* Floating pill arrows — fade in on hover when strip is scrollable in that direction */
+      .collection-strip-wrap::before,
+      .collection-strip-wrap::after {
+        display: flex; align-items: center; justify-content: center;
+        position: absolute; top: 50%;
+        width: 44px; height: 44px;
+        transform: translateY(-50%);
+        background: hsl(0, 0%, 71%);
+        color: rgba(0, 0, 0, 0.75);
+        font-family: 'Manrope', sans-serif;
+        font-size: 0.85rem; font-weight: 500;
+        line-height: 1;
+        border-radius: 999px;
+        pointer-events: none; z-index: 3;
+        opacity: 0; transition: opacity 0.25s ease;
+      }
+      .collection-strip-wrap::before { content: '←'; left: 18px; }
+      .collection-strip-wrap::after  { content: '→'; right: 18px; }
+      .collection-strip-wrap.can-scroll-left:hover::before  { opacity: 1; }
+      .collection-strip-wrap.can-scroll-right:hover::after { opacity: 1; }
+      .collection-strip {
+        display: grid;
+        grid-template-rows: 1fr 1fr;
+        grid-auto-flow: column;
+        height: 624px;
+        gap: 3px;
+        overflow-x: auto;
+        padding: 0 7%;
+        scrollbar-width: none; -ms-overflow-style: none;
+        cursor: grab;
+      }
+      .collection-strip[data-dragging] { cursor: grabbing; }
+      .collection-strip::-webkit-scrollbar { display: none; }
+      .collection-thumb {
+        display: block;
+        overflow: hidden;
+        border-radius: 6px;
+        /* landscape: 3:2 at 300px row height = 450px */
+        width: 450px;
+      }
+      .collection-thumb[data-span="2"] {
+        grid-row: 1 / span 2;
+        /* portrait: 2:3 at 624px full height = 416px */
+        width: 416px;
+      }
+      .collection-thumb[data-span="1"] { grid-row: span 1; }
+      .collection-thumb img {
+        width: 100%; height: 100%;
+        object-fit: cover; display: block;
+        filter: grayscale(35%) saturate(0.95);
+        transition: transform 0.4s ease, filter 0.4s ease;
+      }
+      @media (hover: hover) {
+        .collection-thumb:hover img {
+          filter: grayscale(0%) saturate(1);
+          transform: scale(1.05);
+        }
+      }
+
+      /* ─── Fancybox custom skin (theme-aware) ─── */
+      /* Container is transparent — page shows through, blurred by the backdrop */
+      .fancybox__container {
+        --fancybox-bg: transparent !important;
+        --fancybox-color: var(--lb-color);
+        --fancybox-hover-color: var(--lb-color-strong);
+        background: transparent !important;
+      }
+      /* Backdrop = blurred glass over the page */
+      .fancybox__backdrop {
+        background: rgba(20, 20, 20, 0.82) !important;
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
+        will-change: opacity;
+      }
+      html.dark .fancybox__backdrop {
+        background: rgba(0, 0, 0, 0.85) !important;
+      }
+      /* Promote the content card to its own GPU layer so the fade animates smoothly */
+      .fancybox__slide.has-image > .fancybox__content {
+        will-change: opacity, transform;
+        transform: translateZ(0);
+      }
+      .fancybox__content picture,
+      .fancybox__content picture > img,
+      .fancybox__content > img,
+      .fancybox__content > .f-image {
+        will-change: transform;
+        transform: translateZ(0);
+      }
+      /* The passepartout — solid mat that sits behind only the image */
+      /* Let Fancybox size and position the image naturally; we only add the mat as an outline */
+      .fancybox__slide.has-image {
+        padding: 60px !important;
+      }
+      .fancybox__slide.has-image > .fancybox__content {
+        box-shadow: 0 12px 60px rgba(0, 0, 0, 0.18) !important;
+      }
+      .fancybox__content picture,
+      .fancybox__content picture > img,
+      .fancybox__content > img,
+      .fancybox__content > .f-image {
+        outline: 36px solid var(--lb-bg) !important;
+        background: var(--lb-bg) !important;
+      }
+      /* Hide the caption */
+      .fancybox__caption {
+        display: none !important;
+      }
+      /* Toolbar */
+      .fancybox__toolbar {
+        background: transparent !important;
+        padding: 1.2em 1.5em;
+      }
+      /* All buttons — white with mix-blend-mode so they adapt to whatever's behind */
+      .f-button {
+        background: transparent !important;
+        border: none !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+        mix-blend-mode: difference;
+        transition: color 0.2s ease !important;
+        width: 2.4em !important; height: 2.4em !important;
+      }
+      .f-button:hover, .f-button:focus {
+        background: transparent !important;
+        color: #ffffff !important;
+      }
+      .f-button svg { width: 16px !important; height: 16px !important; stroke-width: 1.5 !important; }
+      /* Nav arrows — same scheme as the top nav (white + mix-blend-mode: difference) */
+      .fancybox__nav .f-button {
+        background: transparent !important;
+        border: 1px solid rgba(255, 255, 255, 0.6) !important;
+        border-radius: 50% !important;
+        width: 2.8em !important; height: 2.8em !important;
+        color: #ffffff !important;
+        mix-blend-mode: difference;
+        transition: border-color 0.2s ease, color 0.2s ease !important;
+      }
+      .fancybox__nav .f-button:hover {
+        border-color: rgba(255, 255, 255, 1) !important;
+        color: #ffffff !important;
+        background: transparent !important;
+      }
+      /* Caption */
+      .fancybox__caption {
+        font-family: 'Cormorant Garamond', serif !important;
+        font-style: italic !important;
+        font-weight: 300 !important;
+        font-size: 0.9rem !important;
+        color: var(--lb-color-faint) !important;
+        text-align: center !important;
+        letter-spacing: 0.06em !important;
+        padding: 1em 2em 1.5em !important;
+        background: transparent !important;
+      }
+      /* Slide counter */
+      .fancybox__infobar {
+        font-family: 'Montserrat', sans-serif !important;
+        font-size: 0.55rem !important;
+        font-weight: 300 !important;
+        letter-spacing: 0.18em !important;
+        color: var(--lb-color-faint) !important;
+      }
+
+      /* ─── Scrollbar ─── */
+      ::-webkit-scrollbar { width: 5px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 9999px; }
+
+      /* ─── Responsive ─── */
+      @media screen and (max-width: 960px) {
+        body { font-size: 16pt; }
+        .topnav-name { display: none; }
+      }
+      @media screen and (max-width: 736px) {
+        body { font-size: 14pt; }
+        #topnav { padding: 1em 1.2em; }
+        /* The centered "trusted by" logo strip collides with Contact + the
+           toggle on phones — hide it here (keeps a clean header). */
+        .trusted-by { display: none; }
+        /* Smaller header on mobile → less gap above the hero. */
+        .heropage { margin-top: 68px; height: calc(100vh - 76px); }
+      }
+    </style>
+  </body>
+</html>

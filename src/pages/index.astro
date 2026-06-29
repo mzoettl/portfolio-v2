@@ -1,0 +1,61 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Sidebar from '../components/Sidebar.astro';
+import Gallery from '../components/Gallery.astro';
+import Contact from '../components/Contact.astro';
+---
+
+<Layout title="Matthias Zoettl | Portfolio" description="Photographer & Filmmaker based in Vienna.">
+
+  <Sidebar />
+
+  <!-- Trusted-by bar on the nav row (sits center) -->
+  <div class="trusted-by">
+    <span class="trusted-by-label">trusted by</span>
+    <div class="logo-flip">
+      <div class="logo-flip-face" data-idx="0"><img src="/logos/crownd-estates.png"    data-name="crownd-estates"    alt="" /></div>
+      <div class="logo-flip-face" data-idx="1"><img src="/logos/color-coordinated.png" data-name="color-coordinated" alt="" /></div>
+      <div class="logo-flip-face" data-idx="2"><img src="/logos/dolce-vita-club.png"   data-name="dolce-vita-club"   alt="" /></div>
+      <div class="logo-flip-face" data-idx="3"><img src="/logos/debode-creations.png"  data-name="debode-creations"  alt="" /></div>
+      <div class="logo-flip-face" data-idx="4"><img src="/logos/physio-reha-move.svg"  data-name="physio-reha-move"  alt="" /></div>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <section id="top" class="heropage">
+    <div class="hero-stage">
+      <video
+        class="hero-video"
+        src="/images/ui/hero_metro_1080p.mp4"
+        autoplay
+        muted
+        loop
+        playsinline
+        preload="metadata"
+      ></video>
+
+      <header class="hero-head-container">
+        <h2 class="hero-title">
+          <span class="hero-left">
+            <span class="hero-line">through</span>
+            <span class="hero-line hero-line--gap"><span>my</span><span>lens</span></span>
+          </span>
+        </h2>
+      </header>
+
+      <img class="hero-person" src="/hero-person.png" alt="" aria-hidden="true" />
+    </div>
+    </section>
+
+    <!-- Tagline -->
+    <section class="tagline-section">
+      <p class="tagline-text">
+        <span class="tagline-sc">s</span>treets, corners,<br>
+        and <span class="tagline-thumb-wrap"><span class="t-img t-img-a"></span><span class="t-img t-img-b"></span></span> the lives in between.
+      </p>
+    </section>
+
+  <Gallery />
+  <Contact />
+
+</Layout>

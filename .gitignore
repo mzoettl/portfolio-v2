@@ -1,0 +1,15 @@
+# build output
+dist/
+.astro/
+
+# dependencies
+node_modules/
+
+# OS files
+.DS_Store
+
+# local-only backup of full-resolution image originals (not deployed)
+.image-originals/
+
+# stray optimizer temp files
+*.opt
