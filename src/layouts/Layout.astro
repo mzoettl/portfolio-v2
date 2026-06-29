@@ -1205,6 +1205,9 @@ const ogImage = new URL('/images/postcards/postcard-01.jpg', Astro.site).href;
         .trusted-by { display: none; }
         /* Smaller header on mobile → less gap above the hero. */
         .heropage { margin-top: 68px; height: calc(100vh - 76px); }
+        /* Reserve the cycling thumbnail's space so the line doesn't re-wrap
+           (jump) when the image pops in — it just scales/fades in instead. */
+        .tagline-thumb-wrap { width: 1.1em; margin: 0 0.12em; }
       }
     </style>
   </body>
