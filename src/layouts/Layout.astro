@@ -4,8 +4,8 @@ interface Props {
   description?: string;
 }
 const {
-  title = 'Matthias Zoettl — Photographer & Filmmaker in Vienna',
-  description = 'Matthias Zoettl is a Vienna-based photographer and filmmaker, shooting street, documentary, and cinematic work.',
+  title = 'Matthias Zöttl | Photography & Film based in Vienna',
+  description = 'Matthias Zöttl — photography & film based in Vienna. Street, documentary, and cinematic work.',
 } = Astro.props;
 // Absolute URLs for social-share previews + canonical (requires `site` in astro.config.mjs).
 const ogImage = new URL('/images/postcards/postcard-01.jpg', Astro.site).href;
@@ -25,7 +25,8 @@ const canonical = new URL(Astro.url.pathname, Astro.site).href;
     <script type="application/ld+json" is:inline set:html={JSON.stringify({
       "@context": "https://schema.org",
       "@type": "Person",
-      "name": "Matthias Zoettl",
+      "name": "Matthias Zöttl",
+      "alternateName": "Matthias Zoettl",
       "jobTitle": "Photographer & Filmmaker",
       "url": "https://matthiaszoettl.vercel.app",
       "address": { "@type": "PostalAddress", "addressLocality": "Vienna", "addressCountry": "AT" },
