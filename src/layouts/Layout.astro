@@ -3,9 +3,13 @@ interface Props {
   title?: string;
   description?: string;
 }
-const { title = 'Matthias Zoettl | Portfolio', description = 'Photographer & Filmmaker based in Vienna.' } = Astro.props;
-// Absolute URL for social-share previews (requires `site` in astro.config.mjs).
+const {
+  title = 'Matthias Zoettl — Photographer & Filmmaker in Vienna',
+  description = 'Matthias Zoettl is a Vienna-based photographer and filmmaker, shooting street, documentary, and cinematic work.',
+} = Astro.props;
+// Absolute URLs for social-share previews + canonical (requires `site` in astro.config.mjs).
 const ogImage = new URL('/images/postcards/postcard-01.jpg', Astro.site).href;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
 ---
 <!doctype html>
 <html lang="en">
@@ -14,7 +18,23 @@ const ogImage = new URL('/images/postcards/postcard-01.jpg', Astro.site).href;
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <title>{title}</title>
+    <link rel="canonical" href={canonical} />
     <link rel="icon" type="image/png" sizes="32x32" href="/images/ui/favicons/favicon-32x32.png" />
+
+    <!-- Structured data: tells search engines who this is -->
+    <script type="application/ld+json" is:inline set:html={JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Person",
+      "name": "Matthias Zoettl",
+      "jobTitle": "Photographer & Filmmaker",
+      "url": "https://matthiaszoettl.vercel.app",
+      "address": { "@type": "PostalAddress", "addressLocality": "Vienna", "addressCountry": "AT" },
+      "sameAs": [
+        "https://www.linkedin.com/in/matthias-zoettl/",
+        "https://github.com/mzoettl",
+        "https://www.youtube.com/@creating-visuals"
+      ]
+    })} />
     <meta name="theme-color" content="#141414" />
 
     <!-- Open Graph / Twitter — social share previews.
@@ -352,6 +372,17 @@ const ogImage = new URL('/images/postcards/postcard-01.jpg', Astro.site).href;
     </script>
 
     <style is:global>
+      /* Visually hidden but available to screen readers / search engines */
+      .sr-only {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
       /* ─── Reduced motion: neutralise transitions/animations + reveal content ─── */
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after {
