@@ -339,6 +339,7 @@ const gridImages = [
     let isDown = false;
     let startX = 0;
     let scrollLeft = 0;
+    let moved = false;
 
     function updateScrollHints() {
       if (!wrap) return;
@@ -350,25 +351,31 @@ const gridImages = [
     requestAnimationFrame(updateScrollHints);
     strip.addEventListener('scroll', updateScrollHints);
 
+    // Stop the browser from native-dragging images (ghost) while panning.
+    strip.querySelectorAll('img, a').forEach(el => el.setAttribute('draggable', 'false'));
+
     strip.addEventListener('mousedown', (e) => {
       isDown = true;
-      strip.dataset.dragging = '';
-      startX = e.pageX - strip.offsetLeft;
+      moved = false;
+      startX = e.pageX;
       scrollLeft = strip.scrollLeft;
+      strip.dataset.dragging = ''; // cursor: grabbing
     });
-    strip.addEventListener('mouseleave', () => { isDown = false; delete strip.dataset.dragging; });
-    strip.addEventListener('mouseup', () => { isDown = false; delete strip.dataset.dragging; });
+    const endDrag = () => { isDown = false; delete strip.dataset.dragging; };
+    strip.addEventListener('mouseleave', endDrag);
+    window.addEventListener('mouseup', endDrag);
     strip.addEventListener('mousemove', (e) => {
       if (!isDown) return;
-      e.preventDefault();
-      const x = e.pageX - strip.offsetLeft;
-      strip.scrollLeft = scrollLeft - (x - startX) * 1.5;
+      const dx = e.pageX - startX;
+      if (Math.abs(dx) > 4) moved = true;        // only a drag past a small threshold
+      if (moved) { e.preventDefault(); strip.scrollLeft = scrollLeft - dx * 1.5; }
     });
 
-    // Prevent fancybox from opening on drag
+    // Suppress the lightbox ONLY if the user actually dragged (not a clean click).
+    // `moved` stays true through mouseup→click, and resets on the next mousedown.
     strip.querySelectorAll('a').forEach(a => {
       a.addEventListener('click', (e) => {
-        if ('dragging' in strip.dataset) e.preventDefault();
+        if (moved) { e.preventDefault(); e.stopPropagation(); }
       });
     });
   });

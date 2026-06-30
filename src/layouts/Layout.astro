@@ -1076,6 +1076,12 @@ const canonical = new URL(Astro.url.pathname, Astro.site).href;
       .collection-strip-wrap::after  { content: '→'; right: 18px; }
       .collection-strip-wrap.can-scroll-left:hover::before  { opacity: 1; }
       .collection-strip-wrap.can-scroll-right:hover::after { opacity: 1; }
+      /* Touch devices have no hover — always show the arrows when scrollable so
+         users know they can swipe sideways through the collection. */
+      @media (hover: none) {
+        .collection-strip-wrap.can-scroll-left::before  { opacity: 1; }
+        .collection-strip-wrap.can-scroll-right::after { opacity: 1; }
+      }
       .collection-strip {
         display: grid;
         grid-template-rows: 1fr 1fr;
@@ -1086,6 +1092,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site).href;
         padding: 0 7%;
         scrollbar-width: none; -ms-overflow-style: none;
         cursor: grab;
+        user-select: none; -webkit-user-select: none;
       }
       .collection-strip[data-dragging] { cursor: grabbing; }
       .collection-strip::-webkit-scrollbar { display: none; }
